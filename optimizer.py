@@ -59,6 +59,44 @@ class AdamW(Optimizer):
                         자세한 내용은 기본 프로젝트 안내문을 참조할 것.
                 '''
                 ### 완성시켜야 할 빈 코드 블록
-                raise NotImplementedError
-
+                # State 초기화
+                if len(state) == 0:
+                    state["step"] = 0
+                    # 1차 모멘트(그라디언트 평균)
+                    state["m"] = torch.zeros_like(p.data)
+                    # 2차 모멘트(그라디언트 제곱의 평균)
+                    state["v"] = torch.zeros_like(p.data)
+                    
+                m = state["m"]
+                v = state["v"]
+                beta1, beta2 = group["betas"]
+                eps = group["eps"]
+                weight_decay = group["weight_decay"]
+                
+                state["step"] += 1
+                t = state["step"]
+                
+                # 1차 모멘트 업데이트
+                m.mul_(beta1).add_(grad, alpha = 1 - beta1)
+                
+                # 2차 모멘트 업데이트
+                v.mul_(beta2).addcmul_(grad, grad, value = 1 - beta2)
+                
+                # Bias correction - mhat, vhat 따로 게산하지 않고 learning rate에 흡수
+                if group["correct_bias"]:
+                    bias_correction1 = 1 - beta1 ** t
+                    bias_correction2 = 1 - beta2 ** t
+                    step_size = alpha * math.sqrt(bias_correction2) / bias_correction1
+                
+                else:
+                    step_size = alpha
+                    
+                # parameter 업데이트
+                denom = v.sqrt().add_(eps)
+                p.data.addcdiv_(m, denom, value = -step_size)
+                
+                # weight decay 분리
+                if weight_decay > 0.0:
+                    p.data.add_(p.data, alpha = -alpha * weight_decay)
+                
         return loss
