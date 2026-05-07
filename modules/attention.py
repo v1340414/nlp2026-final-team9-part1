@@ -35,8 +35,43 @@ class CausalSelfAttention(nn.Module):
   def attention(self, key, query, value, attention_mask):
 
     ### 완성시켜야 할 빈 코드 블록
-    raise NotImplementedError
-
+    # 입력 Tensor shape
+    # key, query, value: [bs, num_heads, seq_len, head_dim]
+    # attention_mask: [bs, 1,1, seq_len]
+    bs, num_heads, seq_len, head_dim = query.size()
+    
+    # 1. score 계산 -> Q랑 K 내적
+    score = query @ key.transpose(-1,-2)
+    
+    # 2. sqrt(head_dim)으로 scaling
+    score = score / (head_dim ** 0.5)
+    
+    # 3. casual mask 생성(하삼각행렬)
+    casual_mask = torch.triu(
+      torch.ones(seq_len, seq_len, device=score.device, dtype=torch.bool), diagonal = 1,
+    )
+    
+    # 가리는 곳(true 위치)에 -10000 더함
+    score = score.masked_fill(casual_mask, -10000.0)
+    
+    # 4. padding mask 적용
+    score = score + attention_mask
+    
+    # 5. softmax
+    attention_prob = torch.softmax(score, dim = -1)
+    
+    # 6. Dropout
+    attention_prob = self.dropout(attention_prob)
+    
+    # 7. value에 attention 가중치 적용
+    context = attention_prob @ value
+    
+    # 8. multi-head 다시 합쳐서 [bs, seq_len, hidden_size] 모양으로 만들기
+    context = context.transpose(1,2).contiguous()
+    context = context.view(bs, seq_len, num_heads * head_dim)
+    
+    return context
+    
 
   def forward(self, hidden_states, attention_mask):
     """
