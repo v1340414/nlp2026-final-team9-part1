@@ -35,7 +35,7 @@
 * 단순히 압축 파일 내려받아서 풀지 말고 GitHub의 프로젝트 리포지토리를 클론할 것.
 * 프로젝트 폴더를 만들 폴더로 가서 다음 명령을 터미널에서 실행한다.
 ```
-git clone https://github.com/kikim6114/nlp2026-fina1.git
+git clone https://github.com/kikim6114/nlp2026-final.git
 ```
 * 소스코드 변경 사항이 있을 경우 공지가 나가므로, 그 경우 `git pull` 하여 PC의 로컬 리포지토리를 업데이트할 수 있다.
 
