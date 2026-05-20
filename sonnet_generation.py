@@ -8,6 +8,7 @@ trains your SonnetGPT model and writes the required submission files.
 SonnetGPT 모델을 훈련하고, 필요한 제출용 파일을 작성한다.
 '''
 
+import os
 import argparse
 import random
 import torch
@@ -30,6 +31,14 @@ from optimizer import AdamW
 
 TQDM_DISABLE = False
 
+# 로그 기록용 함수.
+def write_log(message, log_path):
+  print(message)
+
+  if log_path is not None:
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as f:
+      f.write(message + "\n")
 
 # 재현성을 위한 random seed 고정.
 def seed_everything(seed=11711):
@@ -61,8 +70,15 @@ class SonnetGPT(nn.Module):
     이를 통해, 마지막 토큰에 대한 다음 토큰의 분포만 학습하는 것이 아니라, 모델은 소네트를 구성하는 자연어 분포를 학습할 수 있다.
     """
     ### 완성시켜야 할 빈 코드 블록
-    raise NotImplementedError
+    outputs = self.gpt(input_ids=input_ids, attention_mask=attention_mask)
 
+    # outputs["last_hidden_state"]: [batch_size, seq_len, hidden_size]
+    hidden_states = outputs["last_hidden_state"]
+
+    # logits: [batch_size, seq_len, vocab_size]
+    logits = self.gpt.hidden_state_to_token(hidden_states)
+
+    return logits
 
   def get_device(self):
     for param in self.gpt.parameters():
@@ -128,11 +144,24 @@ def save_model(model, optimizer, args, filepath):
 
   torch.save(save_info, filepath)
   print(f"save the model to {filepath}")
-
+  write_log(f"save the model to {filepath}", args.log_path)
 
 def train(args):
   """Sonnet 데이터셋에서 소넷 생성을 위해 GPT-2 훈련.""" 
-    device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+  device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+  if args.log_path is not None:
+    os.makedirs(os.path.dirname(args.log_path), exist_ok=True)
+    with open(args.log_path, "w", encoding="utf-8") as f:
+        f.write("SonnetGPT Training Log\n")
+        f.write("======================\n")
+        f.write(f"epochs: {args.epochs}\n")
+        f.write(f"batch_size: {args.batch_size}\n")
+        f.write(f"lr: {args.lr}\n")
+        f.write(f"model_size: {args.model_size}\n")
+        f.write(f"temperature: {args.temperature}\n")
+        f.write(f"top_p: {args.top_p}\n")
+        f.write(f"sonnet_path: {args.sonnet_path}\n")
+        f.write(f"held_out_sonnet_path: {args.held_out_sonnet_path}\n\n")
   # 데이터, 해당 데이터셋 및 데이터로드 생성하기.
   sonnet_dataset = SonnetsDataset(args.sonnet_path)
   sonnet_dataloader = DataLoader(sonnet_dataset, shuffle=True, batch_size=args.batch_size,
@@ -174,11 +203,14 @@ def train(args):
     train_loss = train_loss / num_batches
     print(f"Epoch {epoch}: train loss :: {train_loss :.3f}.")
     print('Generating several output sonnets...')
+    write_log(f"Epoch {epoch}: train loss :: {train_loss :.3f}.", args.log_path)
+    write_log('Generating several output sonnets...', args.log_path)
     model.eval()
     for batch in held_out_sonnet_dataset:
       encoding = model.tokenizer(batch[1], return_tensors='pt', padding=True, truncation=True).to(device)
       output = model.generate(encoding['input_ids'], temperature=args.temperature, top_p=args.top_p)
       print(f'{batch[1]}{output[1]}\n\n')
+      write_log(f'{batch[1]}{output[1]}\n\n', args.log_path)
 
     # TODO: 소넷의 작은 테이터셋에서 과적합을 방지하기 위한 종료 조건을 생각하시오.
     save_model(model, optimizer, args, f'{epoch}_{args.filepath}')
@@ -207,8 +239,9 @@ def generate_submission_sonnets(args):
     generated_sonnets.append((sonnet_id, full_sonnet))
 
     print(f'{decoded_output}\n\n')
+    write_log(f'{decoded_output}\n\n', args.log_path)
 
-  with open(args.sonnet_out, "w+") as f:
+  with open(args.sonnet_out, "w+", encoding="utf-8") as f:
     f.write(f"--Generated Sonnets-- \n\n")
     for sonnet in generated_sonnets:
       f.write(f"\n{sonnet[0]}\n")
@@ -235,6 +268,8 @@ def get_args():
   parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
   parser.add_argument("--model_size", type=str, help="The model size as specified on hugging face.",
                       choices=['gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'], default='gpt2')
+  
+  parser.add_argument("--log_path", type=str, default="logs/sonnet_train.log")
 
   args = parser.parse_args()
   return args
