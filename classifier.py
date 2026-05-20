@@ -57,6 +57,7 @@ class GPT2SentimentClassifier(torch.nn.Module):
     TODO: BERT 임베딩의 감정 분류를 위해 필요한 인스턴스 변수를 생성하시오.
     '''
     ### 완성시켜야 할 빈 코드 블록
+    # Classification head - dropout으로 정규화한 후 hidden size를 num_labels로 projection
     self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
     self.classifier = torch.nn.Linear(config.hidden_size, self.num_labels)
 
@@ -70,11 +71,18 @@ class GPT2SentimentClassifier(torch.nn.Module):
         적절한 반환값이 무엇인지 생각해보시오.
     '''
     ### 완성시켜야 할 빈 코드 블록
+    # F.cross_entropy는 logits을 받아서 내부적으로 softmax + NLL loss 계산하므로 적절한 반환값은 raw logits
+    
+    # GPT-2를 통과시켜 문장의 마지막 토큰 hidden state 얻음
+    # last_token: [batch_size, hidden_size]
     gpt_output = self.gpt(input_ids, attention_mask)
     last_token = gpt_output['last_token']
-    last_token = self.dropout(last_token)
-    return self.classifier(last_token)
-
+    
+    # dropout 적용 후 linear classifier로 로짓 계산
+    pooled = self.dropout(last_token)
+    logits = self.classifier(pooled)
+    
+    return logits
 
 class SentimentDataset(Dataset):
   def __init__(self, dataset, args):

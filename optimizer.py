@@ -59,32 +59,44 @@ class AdamW(Optimizer):
                         자세한 내용은 기본 프로젝트 안내문을 참조할 것.
                 '''
                 ### 완성시켜야 할 빈 코드 블록
+                # State 초기화
+                if len(state) == 0:
+                    state["step"] = 0
+                    # 1차 모멘트(그라디언트 평균)
+                    state["m"] = torch.zeros_like(p.data)
+                    # 2차 모멘트(그라디언트 제곱의 평균)
+                    state["v"] = torch.zeros_like(p.data)
+                    
+                m = state["m"]
+                v = state["v"]
                 beta1, beta2 = group["betas"]
                 eps = group["eps"]
                 weight_decay = group["weight_decay"]
-                correct_bias = group["correct_bias"]
-
-                if len(state) == 0:
-                    state["step"] = 0
-                    state["exp_avg"] = torch.zeros_like(p.data)
-                    state["exp_avg_sq"] = torch.zeros_like(p.data)
-
-                exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
+                
                 state["step"] += 1
-
-                exp_avg.mul_(beta1).add_(grad, alpha=1.0 - beta1)
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
-                denom = exp_avg_sq.sqrt().add_(eps)
-
-                step_size = alpha
-                if correct_bias:
-                    bias_correction1 = 1.0 - beta1 ** state["step"]
-                    bias_correction2 = 1.0 - beta2 ** state["step"]
-                    step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
-
-                p.data.addcdiv_(exp_avg, denom, value=-step_size)
-
+                t = state["step"]
+                
+                # 1차 모멘트 업데이트
+                m.mul_(beta1).add_(grad, alpha = 1 - beta1)
+                
+                # 2차 모멘트 업데이트
+                v.mul_(beta2).addcmul_(grad, grad, value = 1 - beta2)
+                
+                # Bias correction - mhat, vhat 따로 게산하지 않고 learning rate에 흡수
+                if group["correct_bias"]:
+                    bias_correction1 = 1 - beta1 ** t
+                    bias_correction2 = 1 - beta2 ** t
+                    step_size = alpha * math.sqrt(bias_correction2) / bias_correction1
+                
+                else:
+                    step_size = alpha
+                    
+                # parameter 업데이트
+                denom = v.sqrt().add_(eps)
+                p.data.addcdiv_(m, denom, value = -step_size)
+                
+                # weight decay 분리
                 if weight_decay > 0.0:
-                    p.data.add_(p.data, alpha=-alpha * weight_decay)
-
+                    p.data.add_(p.data, alpha = -alpha * weight_decay)
+                
         return loss

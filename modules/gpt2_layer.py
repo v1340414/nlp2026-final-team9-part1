@@ -29,9 +29,11 @@ class GPT2Layer(nn.Module):
         이 함수에서는 Layer Normalization을 적용하지 않는다.
     """
     ### 완성시켜야 할 빈 코드 블록
-    output = dense_layer(output)
-    output = dropout(output)
-    return input + output
+    # sub-layer 출력에 dense projection -> dropout -> input 합산
+    transformed = dense_layer(output)
+    transformed = dropout(transformed)
+    
+    return input + transformed
 
 
   def forward(self, hidden_states, attention_mask):
@@ -44,12 +46,27 @@ class GPT2Layer(nn.Module):
     """
 
     ### 완성시켜야 할 빈 코드 블록
-    attention_input = self.attention_layer_norm(hidden_states)
-    attention_output = self.self_attention(attention_input, attention_mask)
-    hidden_states = self.add(hidden_states, attention_output, self.attention_dense, self.attention_dropout)
-
-    feed_forward_input = self.out_layer_norm(hidden_states)
-    feed_forward_output = self.interm_dense(feed_forward_input)
-    feed_forward_output = self.interm_af(feed_forward_output)
-    hidden_states = self.add(hidden_states, feed_forward_output, self.out_dense, self.out_dropout)
+    # 1. multi-head self attention
+    normalized = self.attention_layer_norm(hidden_states)
+    
+    # self-attention 통과, 출력 [bs, seq_len, hidden_size]
+    attention_output = self.self_attention(normalized, attention_mask)
+    
+    # dense projection + dropout + residual
+    hidden_states = self.add(
+      hidden_states, attention_output, self.attention_dense, self.attention_dropout
+    )
+    
+    # 2. Feed-forward network
+    normalized = self.out_layer_norm(hidden_states)
+    
+    # FFN 1차 변환 + GELU 활성화
+    intermediate = self.interm_dense(normalized)
+    intermediate = self.interm_af(intermediate)
+    
+    # dense projection + dropout + residual
+    hidden_states = self.add(
+      hidden_states, intermediate, self.out_dense, self.out_dropout
+    )
+    
     return hidden_states
